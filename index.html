@@ -160,29 +160,9 @@ function parseCSV(text){
   return rows;
 }
 
-// 시트 1개를 2D 배열로 가져오기: gviz 먼저, 실패 시 CSV export
+// 시트 1개를 2D 배열로 가져오기: CSV export 먼저(원본 행 보존), 실패 시 gviz
 async function fetchSheet(sheetName){
-  // 1차: gviz
-  try{
-    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=0&sheet=${encodeURIComponent(sheetName)}`;
-    const res = await fetch(url, {credentials:"omit"});
-    if(res.ok){
-      const txt = await res.text();
-      if(txt.includes("setResponse")){
-        const s=txt.indexOf("{"), e=txt.lastIndexOf("}")+1;
-        const json=JSON.parse(txt.substring(s,e));
-        if(json.status!=="error" && json.table){
-          const rows=(json.table.rows||[]).map(r=>(r.c||[]).map(c=>{
-            if(!c) return "";
-            return c.v!=null ? c.v : (c.f!=null ? c.f : "");
-          }));
-          if(rows.length) return {rows, via:"gviz"};
-        }
-      }
-    }
-  }catch(e){ /* CSV로 폴백 */ }
-
-  // 2차: CSV export (시트명 기반)
+  // 1차: CSV export — 모든 행을 가공 없이 그대로 받아 진짜 헤더가 보존됨
   try{
     const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
     const res = await fetch(csvUrl, {credentials:"omit"});
@@ -196,8 +176,31 @@ async function fetchSheet(sheetName){
     if(res.status===404)
       throw new Error(`'${sheetName}' 시트를 찾을 수 없습니다 — 탭 이름을 확인하세요.`);
   }catch(e){
-    if(e.message.includes("찾을 수 없")) throw e;
+    if(e.message && e.message.includes("찾을 수 없")) throw e;
   }
+
+  // 2차: gviz (CSV가 막혔을 때만)
+  try{
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
+    const res = await fetch(url, {credentials:"omit"});
+    if(res.ok){
+      const txt = await res.text();
+      if(txt.includes("setResponse")){
+        const s=txt.indexOf("{"), e=txt.lastIndexOf("}")+1;
+        const json=JSON.parse(txt.substring(s,e));
+        if(json.status!=="error" && json.table){
+          // gviz는 첫 행을 헤더(cols.label)로 흡수하므로, label도 1행으로 복원
+          const labelRow = (json.table.cols||[]).map(c=>(c.label||"").trim());
+          const dataRows=(json.table.rows||[]).map(r=>(r.c||[]).map(c=>{
+            if(!c) return "";
+            return c.v!=null ? c.v : (c.f!=null ? c.f : "");
+          }));
+          const rows = labelRow.some(x=>x) ? [labelRow, ...dataRows] : dataRows;
+          if(rows.length) return {rows, via:"gviz"};
+        }
+      }
+    }
+  }catch(e){ /* 아래 에러로 */ }
 
   throw new Error(`'${sheetName}' 데이터를 가져오지 못했습니다 — 시트 공개 설정(링크가 있는 모든 사용자·뷰어)을 확인하세요.`);
 }
