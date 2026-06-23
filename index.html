@@ -236,29 +236,42 @@ async function init(){
       fetchSheet("월별매출"),
     ]);
 
-    // --- 월별매출: 헤더행 찾기("거래처코드"가 있는 행) ---
-    const sHdrIdx = findHeaderRow(sales.rows, "거래처코드");
+    // --- 월별매출: 월 컬럼(25.8월) 패턴이 가장 많은 행을 헤더로 자동 선택 ---
+    const monthRe = /(\d{2})\s*[.\-/]\s*(\d{1,2})\s*월?/;  // 25.8월 / 25.8 / 25-8월 등 허용
+    let sHdrIdx = 0, bestCount = -1;
+    sales.rows.slice(0, 8).forEach((row, i)=>{
+      const cnt = row.filter(c => monthRe.test(String(c||"").trim())).length;
+      if(cnt > bestCount){ bestCount = cnt; sHdrIdx = i; }
+    });
     const salesHead = sales.rows[sHdrIdx] || [];
     const monthCols = [];
     salesHead.forEach((c,i)=>{
-      const label = String(c||"").replace(/월$/,"").trim();
-      if(/^\d{2}\.\d{1,2}$/.test(label)) monthCols.push({key:label, idx:i});
+      const m = String(c||"").trim().match(monthRe);
+      if(m) monthCols.push({key:`${m[1]}.${m[2]}`, idx:i});
     });
     MONTHS = monthCols.map(m=>m.key);
-    if(MONTHS.length===0) throw new Error("월별매출 시트에서 월 컬럼(예: 25.8월)을 찾지 못했습니다.");
+    if(MONTHS.length===0){
+      // 진단: 실제로 받은 첫 3행을 에러에 노출
+      const peek = sales.rows.slice(0,3).map((r,i)=>`${i}행[${r.length}칸]: ${r.slice(0,6).map(x=>String(x).slice(0,12)).join(" | ")}`).join("\n");
+      throw new Error(`월별매출 시트에서 월 컬럼(예: 25.8월)을 찾지 못했습니다.\n\n[받은 데이터 ${sales.rows.length}행 · ${sales.via||"?"} 방식]\n${peek}`);
+    }
 
-    // --- 매출 맵: 거래처코드 → {월:매출} (헤더행 이후만) ---
+    // --- 매출 맵: 거래처코드(숫자) 있는 모든 행 ---
     const salesByCode = {};
-    sales.rows.slice(sHdrIdx+1).forEach(r=>{
+    sales.rows.forEach(r=>{
       const code = String(r[0]||"").trim();
-      if(!/^\d+$/.test(code)) return;
+      if(!/^\d{6,}$/.test(code)) return;   // 8자리 거래처코드만
       const rec={};
       monthCols.forEach(m=> rec[m.key]=cleanNum(r[m.idx]));
       salesByCode[code]=rec;
     });
 
-    // --- 거래처마스터: 헤더행 찾기 + 컬럼 인덱스 ---
-    const mHdrIdx = findHeaderRow(master.rows, "거래처코드");
+    // --- 거래처마스터: 핵심 헤더("병원명"+"판매모델")가 있는 행 자동 탐색 ---
+    let mHdrIdx = 0;
+    for(let i=0;i<Math.min(master.rows.length,8);i++){
+      const cells = master.rows[i].map(c=>String(c||"").trim());
+      if(cells.includes("병원명") && cells.includes("판매모델")){ mHdrIdx=i; break; }
+    }
     const H = (master.rows[mHdrIdx]||[]).map(c=>String(c||"").trim());
     const ci = name => H.findIndex(h=>h===name);
     const idx = {
