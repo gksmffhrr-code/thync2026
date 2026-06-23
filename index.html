@@ -88,7 +88,43 @@
   .g-B{background:var(--b)} .g-C{background:var(--c)} .g-X{background:var(--excl)}
   .spark{display:block}
 
-  /* Division grid */
+  /* Group tabs */
+  .grouptabs{display:flex; align-items:center; gap:8px; margin:24px 0 4px; flex-wrap:wrap}
+  .grouptabs .gt-label{font-size:11.5px; color:var(--ink-soft); font-weight:700; margin-right:2px}
+  .gt{font-family:inherit; font-size:12.5px; font-weight:600; padding:7px 16px; cursor:pointer;
+    border:1px solid var(--line); background:var(--card); color:var(--ink-soft); border-radius:20px}
+  .gt:hover{border-color:var(--accent); color:var(--accent)}
+  .gt.on{background:var(--accent); color:#fff; border-color:var(--accent)}
+
+  .jong-tag{display:inline-block; font-size:10.5px; font-weight:700; color:var(--ink-soft);
+    background:#f0ede3; padding:1px 7px; border-radius:4px}
+  .hosp-row{cursor:pointer}
+  .hosp-row:hover{background:#f1f6f4 !important}
+  .grp-head td{background:#eef3ef; font-weight:700; border-top:2px solid var(--accent);
+    border-bottom:1px solid var(--line)}
+  .grp-head .grp-name{font-size:13px; font-weight:800; color:var(--accent)}
+  .grp-head .grp-cnt{font-size:11px; color:var(--ink-soft); font-weight:600; margin-left:4px}
+
+  /* Modal */
+  .modal-overlay{position:fixed; inset:0; background:rgba(16,22,28,.55); z-index:100;
+    display:flex; align-items:center; justify-content:center; padding:20px; animation:fade .15s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .modal{background:var(--card); border-radius:14px; max-width:780px; width:100%;
+    max-height:90vh; overflow:auto; padding:24px; box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  .modal-head{display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+    border-bottom:2px solid var(--ink); padding-bottom:12px; margin-bottom:14px}
+  .modal-title{font-size:20px; font-weight:800; letter-spacing:-.02em}
+  .modal-sub{font-size:12px; color:var(--ink-soft); margin-top:4px}
+  .modal-x{font-size:18px; background:none; border:none; cursor:pointer; color:var(--ink-soft);
+    padding:4px 8px; border-radius:6px; line-height:1}
+  .modal-x:hover{background:#f0ede3; color:var(--ink)}
+  .modal-kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px}
+  .modal-kpis>div{background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:10px 12px}
+  .mk-lab{display:block; font-size:11px; color:var(--ink-soft); font-weight:600}
+  .mk-val{display:block; font-size:17px; font-weight:800; margin-top:3px; letter-spacing:-.01em}
+  .mk-val.rev{color:var(--rev)} .mk-val.util{color:var(--accent)}
+  .modal-chart{height:300px}
+  @media(max-width:560px){.modal-kpis{grid-template-columns:repeat(2,1fr)}}
   .div-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:14px}
   .div-card{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px}
   .div-card h3{font-size:14px; font-weight:800; display:flex; justify-content:space-between; align-items:baseline}
@@ -230,7 +266,7 @@ function gradeOf(pct){
   return ["C","g-C"];
 }
 
-let MONTHS=[], DATA=[], state={div:"전체",office:"전체",form:"전체",q:"",sortKey:"cumUtil",sortDir:-1};
+let MONTHS=[], DATA=[], state={div:"전체",office:"전체",form:"전체",jong:"전체",q:"",sortKey:"cumUtil",sortDir:-1,groupBy:"없음"};
 
 async function init(){
   try{
@@ -278,7 +314,7 @@ async function init(){
     const H = (master.rows[mHdrIdx]||[]).map(c=>String(c||"").trim());
     const ci = name => H.findIndex(h=>h===name);
     const idx = {
-      jong:ci("종별"), biz:ci("사업부"), off:ci("사무소"), mgr:ci("담당자"),
+      jong:ci("종별"), biz:ci("사업부"), off:ci("사무소"),
       code:ci("거래처코드"), hosp:ci("병원명"), model:ci("판매모델"),
       form:ci("세부형태"), beds:ci("병상수")
     };
@@ -298,7 +334,6 @@ async function init(){
         jong:String(r[idx.jong]||"").trim(),
         biz:String(r[idx.biz]||"").trim(),
         off:String(r[idx.off]||"").trim(),
-        mgr:String(r[idx.mgr]||"").trim(),
         form: form || "기존형",
         beds:cleanNum(r[idx.beds])||0,
       };
@@ -341,8 +376,10 @@ async function init(){
   }
 }
 
-function options(field){
-  return [...new Set(DATA.map(d=>d[field]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ko"));
+function options(field, scope){
+  let src = DATA;
+  if(scope) src = DATA.filter(scope);
+  return [...new Set(src.map(d=>d[field]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ko"));
 }
 
 function filtered(){
@@ -350,6 +387,7 @@ function filtered(){
     if(state.div!=="전체" && d.biz!==state.div) return false;
     if(state.office!=="전체" && d.off!==state.office) return false;
     if(state.form!=="전체" && d.form!==state.form) return false;
+    if(state.jong!=="전체" && d.jong!==state.jong) return false;
     if(state.q){
       const q=state.q.toLowerCase();
       if(!d.hosp.toLowerCase().includes(q) && !d.code.includes(q)) return false;
@@ -376,19 +414,26 @@ function render(){
         <div class="val">${rows.length}<small>처</small></div>
         <div class="note">기존형 ${rows.filter(d=>d.form==="기존형").length} · 튜닝형 ${rows.filter(d=>d.form==="튜닝형").length}</div></div>
       <div class="kpi rev"><div class="lab">누적 매출</div>
-        <div class="val">${eok(totRev)}<small>억</small></div>
+        <div class="val">${eok(totRev)}<small>억원</small></div>
         <div class="note">${won(totRev)}원</div></div>
       <div class="kpi rev"><div class="lab">${curMonth}월 매출</div>
-        <div class="val">${eok(curRevSum)}<small>억</small></div>
-        <div class="note">당월 합계</div></div>
+        <div class="val">${eok(curRevSum)}<small>억원</small></div>
+        <div class="note">${won(curRevSum)}원 · 당월 합계</div></div>
       <div class="kpi util"><div class="lab">평균 누계 가동률</div>
         <div class="val">${avgCum.toFixed(1)}<small>%</small></div>
         <div class="note">평가제외 대상 ${exCnt}처</div></div>
     </div>
 
+    <div class="grouptabs">
+      <span class="gt-label">구분</span>
+      ${["없음","사업부","사무소","종별"].map(g=>
+        `<button class="gt ${state.groupBy===g?'on':''}" data-g="${g}">${g==="없음"?"전체 목록":g+"별"}</button>`).join("")}
+    </div>
+
     <div class="controls">
       <div class="grp"><label>사업부</label>${sel("div",["전체",...options("biz")])}</div>
-      <div class="grp"><label>사무소</label>${sel("office",["전체",...options("off")])}</div>
+      <div class="grp"><label>사무소</label>${sel("office",["전체",...options("off", state.div!=="전체"?(d=>d.biz===state.div):null)])}</div>
+      <div class="grp"><label>종별</label>${sel("jong",["전체",...options("jong")])}</div>
       <div class="grp"><label>세부형태</label>${sel("form",["전체","기존형","튜닝형"])}</div>
       <input type="search" id="q" placeholder="병원명·코드 검색" value="${state.q}">
       <div class="spacer"></div>
@@ -396,18 +441,18 @@ function render(){
     </div>
 
     <div class="sec-head"><span class="ey">01</span><h2>병원별 매출·가동률</h2>
-      <span class="hint">가동률 = 월매출 ÷ (병상수 × 일수 × 16,000) · 헤더 클릭 정렬</span></div>
-    <div class="tbl-wrap">${table(rows)}</div>
+      <span class="hint">금액 단위: 백만원 · 가동률 %: 월매출 ÷ (병상수 × 일수 × 16,000) · 행 클릭 시 추이 차트</span></div>
+    <div class="tbl-wrap">${state.groupBy==="없음" ? table(rows) : groupedTable(rows)}</div>
     <div class="foot-note">
-      막대 = 월매출 추이 / 점선 = 가동률 추이 · <b>-</b> 매출0(가동O) · 공란 미가동(가동월 제외) ·
-      누계 가동률은 가동 구간 전체를 병상가중 합산 · 평가제외 = 7개월차↑ & 누계 30%↓
+      월별 셀: <b>위=매출(백만원)</b> / <b>아래=가동률(%)</b> · <b>-</b> 매출0(가동O) · 공란 미가동(가동월 제외) ·
+      누계 가동률은 가동 구간 전체 병상가중 합산 · 평가제외 = 7개월차↑ &amp; 누계 30%↓
     </div>
 
     <div class="sec-head"><span class="ey">02</span><h2>월별 합계 추이</h2>
       <span class="hint">선택된 ${rows.length}개 처 기준</span></div>
     <div class="chart-box"><canvas id="trend"></canvas></div>
     <div class="legend">
-      <span><i style="background:var(--rev)"></i>월 매출(억)</span>
+      <span><i style="background:var(--rev)"></i>월 매출(억원)</span>
       <span><i style="background:var(--accent)"></i>평균 가동률(%)</span>
     </div>
 
@@ -416,9 +461,13 @@ function render(){
   `;
 
   // bind
-  ["div","office","form"].forEach(k=>{
-    document.getElementById("sel-"+k).onchange=e=>{state[k==="div"?"div":k]=e.target.value;
+  ["div","office","form","jong"].forEach(k=>{
+    const el=document.getElementById("sel-"+k);
+    if(el) el.onchange=e=>{state[k]=e.target.value;
       if(k==="div") state.office="전체"; render();};
+  });
+  document.querySelectorAll(".gt").forEach(b=>{
+    b.onclick=()=>{state.groupBy=b.dataset.g; render();};
   });
   document.getElementById("q").oninput=e=>{state.q=e.target.value; render();};
   document.getElementById("csv").onclick=()=>downloadCSV(rows);
@@ -426,6 +475,9 @@ function render(){
     th.onclick=()=>{const k=th.dataset.k;
       if(state.sortKey===k) state.sortDir*=-1; else {state.sortKey=k; state.sortDir=-1;}
       render();};
+  });
+  document.querySelectorAll("tr[data-code]").forEach(tr=>{
+    tr.onclick=()=>openHospModal(tr.dataset.code);
   });
   // restore search focus
   const qi=document.getElementById("q"); if(state.q){qi.focus(); qi.setSelectionRange(qi.value.length,qi.value.length);}
@@ -437,35 +489,79 @@ function sel(key,opts){
   return `<select id="sel-${key}">${opts.map(o=>`<option ${o===cur?"selected":""}>${o}</option>`).join("")}</select>`;
 }
 
-function table(rows){
-  const sorted = sortRows(rows);
-  const monthHead = MONTHS.map(m=>`<th colspan="2">${m}</th>`).join("");
-  const subHead = MONTHS.map(()=>`<th class="sub">매출</th><th class="sub">가동</th>`).join("");
+function tableHead(){
   const arrow = k => state.sortKey===k ? (state.sortDir<0?"▾":"▴") : "";
   const act = k => state.sortKey===k?"act":"";
-  return `<table>
-    <thead>
+  return `<thead>
       <tr class="grouprow">
-        <th colspan="5" class="lft">거래처</th>
+        <th colspan="6" class="lft">거래처</th>
         <th colspan="3">요약</th>
-        ${monthHead}
+        <th colspan="${MONTHS.length*2}">월별 · 위 매출(백만원) / 아래 가동률(%)</th>
       </tr>
       <tr>
         <th class="lft ${act('hosp')}" data-k="hosp">병원명 <span class="ar">${arrow('hosp')}</span></th>
         <th class="lft">형태</th>
-        <th class="lft">사업부</th>
+        <th class="lft">종별</th>
+        <th class="lft">사업부 / 사무소</th>
         <th>병상</th>
         <th class="${act('activeMonths')}" data-k="activeMonths">가동월 <span class="ar">${arrow('activeMonths')}</span></th>
-        <th class="${act('cumRev')}" data-k="cumRev">누적매출 <span class="ar">${arrow('cumRev')}</span></th>
-        <th class="${act('cumUtil')}" data-k="cumUtil">누계가동 <span class="ar">${arrow('cumUtil')}</span></th>
-        <th class="${act('curUtil')}" data-k="curUtil">당월가동 <span class="ar">${arrow('curUtil')}</span></th>
+        <th class="${act('cumRev')}" data-k="cumRev">누적매출(백만) <span class="ar">${arrow('cumRev')}</span></th>
+        <th class="${act('cumUtil')}" data-k="cumUtil">누계가동(%) <span class="ar">${arrow('cumUtil')}</span></th>
+        <th class="${act('curUtil')}" data-k="curUtil">당월가동(%) <span class="ar">${arrow('curUtil')}</span></th>
         ${MONTHS.map(m=>`<th colspan="2" style="text-align:center;font-size:10px">${m}</th>`).join("")}
       </tr>
-    </thead>
-    <tbody>
-      ${sorted.map(d=>rowHTML(d)).join("")}
-    </tbody>
+    </thead>`;
+}
+
+function table(rows){
+  const sorted = sortRows(rows);
+  return `<table>${tableHead()}
+    <tbody>${sorted.map(d=>rowHTML(d)).join("")}</tbody>
   </table>`;
+}
+
+// 구분 탭: 그룹 기준별로 묶고 소계행 표시
+function groupedTable(rows){
+  const keyField = {"사업부":"biz","사무소":"off","종별":"jong"}[state.groupBy];
+  const groups={};
+  rows.forEach(d=>{(groups[d[keyField]||"미지정"]=groups[d[keyField]||"미지정"]||[]).push(d);});
+  // 정렬 기준
+  const divOrder=["서울1","서울2","지방1","지방2","지방3","지방4","서울3"];
+  const jongOrder=["상급","종합","병원","요양","로컬"];
+  const ord = state.groupBy==="사업부"?divOrder : state.groupBy==="종별"?jongOrder : null;
+  const keys=Object.keys(groups).sort((a,b)=>{
+    if(ord){const ia=ord.indexOf(a),ib=ord.indexOf(b); if(ia!==ib) return (ia<0?99:ia)-(ib<0?99:ib);}
+    return a.localeCompare(b,"ko");
+  });
+  const span = 9 + MONTHS.length*2;
+  const body = keys.map(k=>{
+    const g=sortRows(groups[k]);
+    const rev=g.reduce((s,d)=>s+d.cumRev,0);
+    const wu=g.filter(d=>d.cumUtil!=null);
+    const avg=wu.length?wu.reduce((s,d)=>s+d.cumUtil,0)/wu.length:null;
+    const beds=g.reduce((s,d)=>s+d.beds,0);
+    // 그룹 월별 합계
+    const monthCells=MONTHS.map(mk=>{
+      const rs=g.map(d=>d.monthly.find(x=>x.mk===mk)).filter(m=>m&&m.rev!=null);
+      const rsum=rs.reduce((s,m)=>s+(m.rev||0),0);
+      const us=g.map(d=>{const m=d.monthly.find(x=>x.mk===mk);return m&&m.util;}).filter(u=>u!=null);
+      const uavg=us.length?us.reduce((a,b)=>a+b,0)/us.length:null;
+      const rev=rs.length?`<span class="rev-cell">${(rsum/1e6).toFixed(0)}</span>`:`<span class="dash">·</span>`;
+      const util=uavg!=null?`<span class="util-cell" style="color:${utilColor(uavg)}">${uavg.toFixed(0)}</span>`:`<span class="dash">·</span>`;
+      return `<td>${rev}</td><td>${util}</td>`;
+    }).join("");
+    return `<tr class="grp-head">
+        <td class="lft" colspan="4"><span class="grp-name">${k}</span> <span class="grp-cnt">${g.length}처</span></td>
+        <td>${beds.toLocaleString()}</td>
+        <td>—</td>
+        <td class="rev-cell">${(rev/1e6).toFixed(0)}</td>
+        <td>${avg!=null?`<span style="color:${utilColor(avg)};font-weight:800">${avg.toFixed(1)}%</span>`:"—"}</td>
+        <td>—</td>
+        ${monthCells}
+      </tr>
+      ${g.map(d=>rowHTML(d)).join("")}`;
+  }).join("");
+  return `<table>${tableHead()}<tbody>${body}</tbody></table>`;
 }
 
 function rowHTML(d){
@@ -487,13 +583,14 @@ function rowHTML(d){
     return `<td>${rev}</td><td>${util}</td>`;
   }).join("");
 
-  return `<tr>
-    <td class="lft"><span class="hosp">${d.hosp}</span><br><span class="code">${d.code} · ${d.mgr||""}</span></td>
+  return `<tr data-code="${d.code}" class="hosp-row">
+    <td class="lft"><span class="hosp">${d.hosp}</span><br><span class="code">${d.code}</span></td>
     <td class="lft">${formTag}</td>
+    <td class="lft"><span class="jong-tag">${d.jong||"—"}</span></td>
     <td class="lft" style="font-size:11px;color:var(--ink-soft)">${d.biz}<br>${d.off}</td>
     <td>${d.beds}</td>
     <td>${d.activeMonths}</td>
-    <td class="rev-cell">${won(d.cumRev)}</td>
+    <td class="rev-cell">${(d.cumRev/1e6).toFixed(0)}</td>
     <td>${d.cumUtil!=null?`<span style="color:${utilColor(d.cumUtil)};font-weight:700">${d.cumUtil.toFixed(1)}%</span> ${gradeHTML}`:gradeHTML}</td>
     <td>${d.curUtil!=null?`<span style="color:${utilColor(d.curUtil)};font-weight:700">${d.curUtil.toFixed(1)}%</span>`:`<span class="dash">—</span>`}</td>
     ${cells}
@@ -572,12 +669,12 @@ function drawTrend(rows){
 }
 
 function downloadCSV(rows){
-  const head=["병원명","거래처코드","담당자","사업부","사무소","세부형태","병상수","가동월","누적매출",
+  const head=["병원명","거래처코드","종별","사업부","사무소","세부형태","병상수","가동월","누적매출(원)",
     "누계가동률(%)","당월가동률(%)","등급",
-    ...MONTHS.flatMap(m=>[`${m}_매출`,`${m}_가동률`])];
+    ...MONTHS.flatMap(m=>[`${m}월_매출(원)`,`${m}월_가동률(%)`])];
   const body=rows.map(d=>{
     let grade=d.excluded?"제외":(d.cumUtil==null?"":gradeOf(d.cumUtil)[0]);
-    return [d.hosp,d.code,d.mgr,d.biz,d.off,d.form,d.beds,d.activeMonths,d.cumRev,
+    return [d.hosp,d.code,d.jong,d.biz,d.off,d.form,d.beds,d.activeMonths,d.cumRev,
       d.cumUtil!=null?d.cumUtil.toFixed(1):"",d.curUtil!=null?d.curUtil.toFixed(1):"",grade,
       ...d.monthly.flatMap(m=>[m.rev==null?"":m.rev, m.util!=null?m.util.toFixed(1):""])
     ];
@@ -588,6 +685,63 @@ function downloadCSV(rows){
   a.href=URL.createObjectURL(blob);
   a.download=`thync_매출가동률_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
+}
+
+// 병원 행 클릭 → 매출·가동률 추이 모달
+let modalChart=null;
+function openHospModal(code){
+  const d=DATA.find(x=>x.code===code); if(!d) return;
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay";
+  const grade = d.excluded?"평가제외":(d.cumUtil!=null?gradeOf(d.cumUtil)[0]+" 등급":"—");
+  overlay.innerHTML=`
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title">${d.hosp}</div>
+          <div class="modal-sub">${d.code} · ${d.jong} · ${d.biz}/${d.off} · ${d.form} · ${d.beds}병상</div>
+        </div>
+        <button class="modal-x" aria-label="닫기">✕</button>
+      </div>
+      <div class="modal-kpis">
+        <div><span class="mk-lab">누적매출</span><span class="mk-val rev">${won(d.cumRev)}원</span></div>
+        <div><span class="mk-lab">누계 가동률</span><span class="mk-val util">${d.cumUtil!=null?d.cumUtil.toFixed(1)+"%":"—"}</span></div>
+        <div><span class="mk-lab">당월 가동률</span><span class="mk-val util">${d.curUtil!=null?d.curUtil.toFixed(1)+"%":"—"}</span></div>
+        <div><span class="mk-lab">평가</span><span class="mk-val">${grade}</span></div>
+      </div>
+      <div class="modal-chart"><canvas id="hospChart"></canvas></div>
+      <div class="legend" style="justify-content:center;margin-top:12px">
+        <span><i style="background:var(--rev)"></i>월 매출(백만원)</span>
+        <span><i style="background:var(--accent)"></i>가동률(%)</span>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close=()=>{ if(modalChart){modalChart.destroy();modalChart=null;} overlay.remove(); };
+  overlay.onclick=e=>{ if(e.target===overlay) close(); };
+  overlay.querySelector(".modal-x").onclick=close;
+  document.addEventListener("keydown",function esc(e){if(e.key==="Escape"){close();document.removeEventListener("keydown",esc);}});
+
+  const ctx=overlay.querySelector("#hospChart");
+  const revM=d.monthly.map(m=>m.rev!=null?m.rev/1e6:null);
+  const utilM=d.monthly.map(m=>m.util!=null?m.util:null);
+  modalChart=new Chart(ctx,{
+    data:{labels:MONTHS.map(m=>m+"월"),
+      datasets:[
+        {type:"bar",label:"월 매출(백만원)",data:revM,backgroundColor:"#2b5c8a",
+         yAxisID:"y",borderRadius:4,order:2},
+        {type:"line",label:"가동률(%)",data:utilM,borderColor:"#0e6e5c",backgroundColor:"#0e6e5c",
+         yAxisID:"y1",tension:.3,borderWidth:2.5,pointRadius:3,order:1,spanGaps:true},
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>c.dataset.label.includes("매출")
+          ? ` 매출 ${c.parsed.y!=null?c.parsed.y.toFixed(1):"-"}백만원` : ` 가동률 ${c.parsed.y!=null?c.parsed.y.toFixed(1):"-"}%`}}},
+      scales:{
+        y:{position:"left",title:{display:true,text:"매출(백만원)"},grid:{color:"#efece3"},beginAtZero:true},
+        y1:{position:"right",title:{display:true,text:"가동률(%)"},grid:{drawOnChartArea:false},min:0,max:100},
+        x:{grid:{display:false}}
+      }}
+  });
 }
 
 init();
