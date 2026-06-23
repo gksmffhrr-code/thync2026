@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>thynC 매출·가동률 현황</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --ink:#10161c; --ink-soft:#3a4750; --line:#e3e0d6; --line-soft:#efece3;
+    --paper:#f7f5ee; --card:#ffffff; --accent:#0e6e5c; --accent-soft:#e0efe9;
+    --gold:#b7892f; --warn:#c0492f; --rev:#2b5c8a; --rev-soft:#e3edf5;
+    --s:#0e6e5c; --a:#3a8f5c; --bp:#7a9e3a; --b:#b7892f; --c:#c0492f; --excl:#9aa0a6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:var(--paper); color:var(--ink); line-height:1.5;
+    font-feature-settings:"tnum" 1; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1320px; margin:0 auto; padding:28px 22px 80px}
+
+  /* Header */
+  header{display:flex; align-items:flex-end; justify-content:space-between; gap:20px;
+    padding-bottom:18px; border-bottom:2px solid var(--ink); flex-wrap:wrap}
+  .title-block h1{font-size:26px; letter-spacing:-.02em; font-weight:800}
+  .title-block .sub{font-size:13px; color:var(--ink-soft); margin-top:3px; letter-spacing:.01em}
+  .meta{text-align:right; font-size:12px; color:var(--ink-soft)}
+  .meta .stamp{font-weight:700; color:var(--accent); font-size:13px}
+  .meta .conf{display:inline-block; margin-top:4px; font-size:10.5px; letter-spacing:.08em;
+    color:var(--warn); border:1px solid var(--warn); border-radius:3px; padding:1px 6px; font-weight:700}
+
+  /* KPI strip */
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:22px 0 8px}
+  .kpi{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px}
+  .kpi .lab{font-size:11.5px; color:var(--ink-soft); letter-spacing:.04em; font-weight:600}
+  .kpi .val{font-size:27px; font-weight:800; letter-spacing:-.02em; margin-top:6px}
+  .kpi .val small{font-size:14px; font-weight:600; color:var(--ink-soft); margin-left:2px}
+  .kpi .note{font-size:11px; color:var(--ink-soft); margin-top:4px}
+  .kpi.rev .val{color:var(--rev)}
+  .kpi.util .val{color:var(--accent)}
+
+  /* Controls */
+  .controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:24px 0 14px}
+  .controls .grp{display:flex; align-items:center; gap:7px}
+  .controls label{font-size:11.5px; color:var(--ink-soft); font-weight:600}
+  select,input[type=search]{font-family:inherit; font-size:13px; padding:7px 10px;
+    border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--ink)}
+  input[type=search]{min-width:200px}
+  .spacer{flex:1}
+  .btn{font-family:inherit; font-size:12.5px; font-weight:600; padding:7px 14px; cursor:pointer;
+    border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:7px}
+  .btn.ghost{background:transparent; color:var(--accent)}
+  .btn:hover{opacity:.9}
+
+  /* Section heads */
+  .sec-head{display:flex; align-items:baseline; gap:10px; margin:30px 0 12px}
+  .sec-head h2{font-size:16px; font-weight:800; letter-spacing:-.01em}
+  .sec-head .ey{font-size:11px; color:var(--accent); font-weight:700; letter-spacing:.08em}
+  .sec-head .hint{font-size:11.5px; color:var(--ink-soft); margin-left:auto}
+
+  /* Table */
+  .tbl-wrap{background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:auto}
+  table{width:100%; border-collapse:collapse; font-size:12.5px; white-space:nowrap}
+  thead th{position:sticky; top:0; background:#f0ede3; z-index:2; text-align:right;
+    padding:10px 11px; font-weight:700; font-size:11px; color:var(--ink-soft);
+    border-bottom:1.5px solid var(--line); letter-spacing:.02em; cursor:pointer; user-select:none}
+  thead th.lft{text-align:left}
+  thead th .ar{opacity:.4; font-size:9px}
+  thead th.act .ar{opacity:1; color:var(--accent)}
+  thead .grouprow th{text-align:center; background:#e9e6db; color:var(--ink);
+    border-bottom:1px solid var(--line); position:static; cursor:default}
+  tbody td{padding:9px 11px; text-align:right; border-bottom:1px solid var(--line-soft)}
+  tbody td.lft{text-align:left}
+  tbody tr:hover{background:#faf8f1}
+  .hosp{font-weight:700; color:var(--ink)}
+  .code{font-size:10.5px; color:var(--ink-soft)}
+  .tag{display:inline-block; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px}
+  .tag.gj{background:#eef1e6; color:#5f7a25}
+  .tag.tn{background:var(--accent-soft); color:var(--accent)}
+  .rev-cell{color:var(--rev); font-variant-numeric:tabular-nums}
+  .rev-cell.zero{color:#c3bfb2}
+  .util-cell{font-weight:700; font-variant-numeric:tabular-nums}
+  .dash{color:#cfcabb}
+  .grade{display:inline-block; min-width:30px; text-align:center; font-size:11px; font-weight:800;
+    padding:2px 6px; border-radius:5px; color:#fff}
+  .g-S{background:var(--s)} .g-A{background:var(--a)} .g-Bp{background:var(--bp)}
+  .g-B{background:var(--b)} .g-C{background:var(--c)} .g-X{background:var(--excl)}
+  .spark{display:block}
+
+  /* Division grid */
+  .div-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:14px}
+  .div-card{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px}
+  .div-card h3{font-size:14px; font-weight:800; display:flex; justify-content:space-between; align-items:baseline}
+  .div-card h3 .n{font-size:11px; color:var(--ink-soft); font-weight:600}
+  .div-row{display:flex; justify-content:space-between; font-size:12px; padding:5px 0; border-bottom:1px dashed var(--line-soft)}
+  .div-row:last-child{border-bottom:none}
+  .div-row .k{color:var(--ink-soft)}
+  .div-row .v{font-weight:700; font-variant-numeric:tabular-nums}
+  .div-row .v.rev{color:var(--rev)} .div-row .v.util{color:var(--accent)}
+
+  /* States */
+  .state{padding:60px 20px; text-align:center; color:var(--ink-soft); font-size:14px}
+  .state.err{color:var(--warn)}
+  .state .big{font-size:16px; font-weight:700; margin-bottom:8px; color:var(--ink)}
+  .state code{background:#efece3; padding:2px 6px; border-radius:4px; font-size:12px}
+  .chart-box{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; height:340px}
+  .legend{display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--ink-soft); margin-top:8px}
+  .legend span{display:inline-flex; align-items:center; gap:5px}
+  .legend i{width:11px; height:11px; border-radius:3px; display:inline-block}
+  .foot-note{font-size:11px; color:var(--ink-soft); margin-top:10px; line-height:1.6}
+
+  @media(max-width:820px){
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .meta{text-align:left}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title-block">
+      <h1>thynC 매출·가동률 현황</h1>
+      <div class="sub">사용량비례형 계약처 · 월별 매출과 가동률 통합 추적</div>
+    </div>
+    <div class="meta">
+      <div>최종 갱신 <span class="stamp" id="stamp">불러오는 중…</span></div>
+      <div class="conf">대외비</div>
+    </div>
+  </header>
+
+  <div id="app">
+    <div class="state" id="loading">데이터를 불러오는 중…</div>
+  </div>
+</div>
+
+<script>
+// ====== 설정 ======
+const SHEET_ID = "1XrM1Sn09jBnzmvS3aLT4uu1iHRRBpE-bwtvSqv48Cy4";
+const ANNUAL_UNIT = 16000; // EX871 13000 + E7230 3000
+
+// CSV 파서 (따옴표 안 콤마/줄바꿈 처리)
+function parseCSV(text){
+  const rows=[]; let row=[], cur="", q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i], n=text[i+1];
+    if(q){
+      if(c==='"'&&n==='"'){cur+='"';i++;}
+      else if(c==='"'){q=false;}
+      else cur+=c;
+    }else{
+      if(c==='"')q=true;
+      else if(c===','){row.push(cur);cur="";}
+      else if(c==='\r'){}
+      else if(c==='\n'){row.push(cur);rows.push(row);row=[];cur="";}
+      else cur+=c;
+    }
+  }
+  if(cur!==""||row.length){row.push(cur);rows.push(row);}
+  return rows;
+}
+
+// 시트 1개를 2D 배열로 가져오기: gviz 먼저, 실패 시 CSV export
+async function fetchSheet(sheetName){
+  // 1차: gviz
+  try{
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=0&sheet=${encodeURIComponent(sheetName)}`;
+    const res = await fetch(url, {credentials:"omit"});
+    if(res.ok){
+      const txt = await res.text();
+      if(txt.includes("setResponse")){
+        const s=txt.indexOf("{"), e=txt.lastIndexOf("}")+1;
+        const json=JSON.parse(txt.substring(s,e));
+        if(json.status!=="error" && json.table){
+          const rows=(json.table.rows||[]).map(r=>(r.c||[]).map(c=>{
+            if(!c) return "";
+            return c.v!=null ? c.v : (c.f!=null ? c.f : "");
+          }));
+          if(rows.length) return {rows, via:"gviz"};
+        }
+      }
+    }
+  }catch(e){ /* CSV로 폴백 */ }
+
+  // 2차: CSV export (시트명 기반)
+  try{
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+    const res = await fetch(csvUrl, {credentials:"omit"});
+    if(res.ok){
+      const txt = await res.text();
+      if(!txt.trim().startsWith("<")){
+        const rows = parseCSV(txt);
+        if(rows.length) return {rows, via:"csv"};
+      }
+    }
+    if(res.status===404)
+      throw new Error(`'${sheetName}' 시트를 찾을 수 없습니다 — 탭 이름을 확인하세요.`);
+  }catch(e){
+    if(e.message.includes("찾을 수 없")) throw e;
+  }
+
+  throw new Error(`'${sheetName}' 데이터를 가져오지 못했습니다 — 시트 공개 설정(링크가 있는 모든 사용자·뷰어)을 확인하세요.`);
+}
+
+// 헤더행 찾기: 특정 키워드가 들어있는 첫 행의 인덱스
+function findHeaderRow(rows, keyword){
+  for(let i=0;i<Math.min(rows.length,6);i++){
+    if(rows[i].some(c=>String(c||"").trim()===keyword)) return i;
+  }
+  return 0;
+}
+
+const DAYS = {"25.8":31,"25.9":30,"25.10":31,"25.11":30,"25.12":31,"26.1":31,"26.2":28,"26.3":31,"26.4":30,"26.5":31,"26.6":30,"26.7":31};
+const won = n => n==null||n==="" ? "" : Math.round(n).toLocaleString("ko-KR");
+const eok = n => (n/1e8).toFixed(2);
+const cleanNum = v => {
+  if(v==null) return null;
+  if(typeof v==="number") return v;
+  const s=String(v).replace(/[, ]/g,"").trim();
+  if(s===""||s==="-") return s==="-" ? 0 : null; // "-" 매출0(가동O), 빈칸 null(미가동)
+  const n=Number(s); return isNaN(n)?null:n;
+};
+
+function gradeOf(pct){
+  if(pct>=70) return ["S","g-S"]; if(pct>=60) return ["A","g-A"];
+  if(pct>=50) return ["B+","g-Bp"]; if(pct>=40) return ["B","g-B"];
+  return ["C","g-C"];
+}
+
+let MONTHS=[], DATA=[], state={div:"전체",office:"전체",form:"전체",q:"",sortKey:"cumUtil",sortDir:-1};
+
+async function init(){
+  try{
+    const [master, sales] = await Promise.all([
+      fetchSheet("거래처마스터"),
+      fetchSheet("월별매출"),
+    ]);
+
+    // --- 월별매출: 헤더행 찾기("거래처코드"가 있는 행) ---
+    const sHdrIdx = findHeaderRow(sales.rows, "거래처코드");
+    const salesHead = sales.rows[sHdrIdx] || [];
+    const monthCols = [];
+    salesHead.forEach((c,i)=>{
+      const label = String(c||"").replace(/월$/,"").trim();
+      if(/^\d{2}\.\d{1,2}$/.test(label)) monthCols.push({key:label, idx:i});
+    });
+    MONTHS = monthCols.map(m=>m.key);
+    if(MONTHS.length===0) throw new Error("월별매출 시트에서 월 컬럼(예: 25.8월)을 찾지 못했습니다.");
+
+    // --- 매출 맵: 거래처코드 → {월:매출} (헤더행 이후만) ---
+    const salesByCode = {};
+    sales.rows.slice(sHdrIdx+1).forEach(r=>{
+      const code = String(r[0]||"").trim();
+      if(!/^\d+$/.test(code)) return;
+      const rec={};
+      monthCols.forEach(m=> rec[m.key]=cleanNum(r[m.idx]));
+      salesByCode[code]=rec;
+    });
+
+    // --- 거래처마스터: 헤더행 찾기 + 컬럼 인덱스 ---
+    const mHdrIdx = findHeaderRow(master.rows, "거래처코드");
+    const H = (master.rows[mHdrIdx]||[]).map(c=>String(c||"").trim());
+    const ci = name => H.findIndex(h=>h===name);
+    const idx = {
+      jong:ci("종별"), biz:ci("사업부"), off:ci("사무소"), mgr:ci("담당자"),
+      code:ci("거래처코드"), hosp:ci("병원명"), model:ci("판매모델"),
+      form:ci("세부형태"), beds:ci("병상수")
+    };
+
+    // --- 사용량비례형만, 코드 중복 시 마지막(최신) 레코드 사용 ---
+    const seen={};
+    master.rows.slice(mHdrIdx+1).forEach(r=>{
+      const model=String(r[idx.model]||"").trim();
+      const form=String(r[idx.form]||"").trim();
+      // 사용량비례형: 판매모델이 "사용량"으로 시작하거나 세부형태가 기존형/튜닝형
+      const isUsage = model.startsWith("사용량") || form==="기존형" || form==="튜닝형";
+      if(!isUsage) return;
+      const code=String(r[idx.code]||"").trim();
+      if(!/^\d+$/.test(code)) return;
+      seen[code]={
+        code, hosp:String(r[idx.hosp]||"").trim(),
+        jong:String(r[idx.jong]||"").trim(),
+        biz:String(r[idx.biz]||"").trim(),
+        off:String(r[idx.off]||"").trim(),
+        mgr:String(r[idx.mgr]||"").trim(),
+        form: form || "기존형",
+        beds:cleanNum(r[idx.beds])||0,
+      };
+    });
+
+    // --- 행 구성: 매출 + 가동률 계산 ---
+    DATA = Object.values(seen).map(h=>{
+      const sm = salesByCode[h.code] || {};
+      const monthly = MONTHS.map(mk=>{
+        const rev = sm[mk];                       // null=미가동, 0=가동O매출0
+        let util=null;
+        if(rev!=null && h.beds>0 && DAYS[mk]){
+          util = rev / (h.beds*DAYS[mk]*ANNUAL_UNIT) * 100;
+        }
+        return {mk, rev, util};
+      });
+      const active = monthly.filter(m=>m.rev!=null);
+      const cumRev = active.reduce((s,m)=>s+(m.rev||0),0);
+      // 누계 가동률 = 가동 구간 전체 매출 / 가동 구간 전체 약정량
+      const cumDen = active.reduce((s,m)=>s+(h.beds*(DAYS[m.mk]||30)*ANNUAL_UNIT),0);
+      const cumUtil = cumDen>0 ? cumRev/cumDen*100 : null;
+      // 당월 = 매출이 잡힌 마지막 달
+      const last = [...active].reverse().find(m=>m.rev!=null);
+      const curUtil = last ? last.util : null;
+      const curRev = last ? last.rev : null;
+      const activeMonths = active.length;
+      // 평가제외: 7개월차 이상 + 가동률 30% 미만
+      const excluded = activeMonths>=7 && cumUtil!=null && cumUtil<30;
+      return {...h, monthly, cumRev, cumUtil, curRev, curUtil, activeMonths, excluded};
+    }).filter(h=> h.beds>0); // 병상 미입력 제외
+
+    document.getElementById("stamp").textContent =
+      new Date().toLocaleString("ko-KR",{month:"long",day:"numeric",hour:"2-digit",minute:"2-digit"});
+    render();
+  }catch(e){
+    document.getElementById("app").innerHTML =
+      `<div class="state err"><div class="big">데이터를 불러오지 못했습니다</div>
+       ${e.message}<br><br>
+       구글시트가 <code>링크가 있는 모든 사용자 · 뷰어</code>로 공개되어 있는지 확인해 주세요.</div>`;
+  }
+}
+
+function options(field){
+  return [...new Set(DATA.map(d=>d[field]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ko"));
+}
+
+function filtered(){
+  return DATA.filter(d=>{
+    if(state.div!=="전체" && d.biz!==state.div) return false;
+    if(state.office!=="전체" && d.off!==state.office) return false;
+    if(state.form!=="전체" && d.form!==state.form) return false;
+    if(state.q){
+      const q=state.q.toLowerCase();
+      if(!d.hosp.toLowerCase().includes(q) && !d.code.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function render(){
+  const rows = filtered();
+  // KPI
+  const totRev = rows.reduce((s,d)=>s+d.cumRev,0);
+  const curMonth = MONTHS[MONTHS.length-1];
+  const curRevSum = rows.reduce((s,d)=>{
+    const m=d.monthly.find(x=>x.mk===curMonth); return s+((m&&m.rev)||0);
+  },0);
+  const withUtil = rows.filter(d=>d.cumUtil!=null);
+  const avgCum = withUtil.length ? withUtil.reduce((s,d)=>s+d.cumUtil,0)/withUtil.length : 0;
+  const exCnt = rows.filter(d=>d.excluded).length;
+
+  document.getElementById("app").innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><div class="lab">추적 대상 (사용량비례형)</div>
+        <div class="val">${rows.length}<small>처</small></div>
+        <div class="note">기존형 ${rows.filter(d=>d.form==="기존형").length} · 튜닝형 ${rows.filter(d=>d.form==="튜닝형").length}</div></div>
+      <div class="kpi rev"><div class="lab">누적 매출</div>
+        <div class="val">${eok(totRev)}<small>억</small></div>
+        <div class="note">${won(totRev)}원</div></div>
+      <div class="kpi rev"><div class="lab">${curMonth}월 매출</div>
+        <div class="val">${eok(curRevSum)}<small>억</small></div>
+        <div class="note">당월 합계</div></div>
+      <div class="kpi util"><div class="lab">평균 누계 가동률</div>
+        <div class="val">${avgCum.toFixed(1)}<small>%</small></div>
+        <div class="note">평가제외 대상 ${exCnt}처</div></div>
+    </div>
+
+    <div class="controls">
+      <div class="grp"><label>사업부</label>${sel("div",["전체",...options("biz")])}</div>
+      <div class="grp"><label>사무소</label>${sel("office",["전체",...options("off")])}</div>
+      <div class="grp"><label>세부형태</label>${sel("form",["전체","기존형","튜닝형"])}</div>
+      <input type="search" id="q" placeholder="병원명·코드 검색" value="${state.q}">
+      <div class="spacer"></div>
+      <button class="btn ghost" id="csv">엑셀 다운로드</button>
+    </div>
+
+    <div class="sec-head"><span class="ey">01</span><h2>병원별 매출·가동률</h2>
+      <span class="hint">가동률 = 월매출 ÷ (병상수 × 일수 × 16,000) · 헤더 클릭 정렬</span></div>
+    <div class="tbl-wrap">${table(rows)}</div>
+    <div class="foot-note">
+      막대 = 월매출 추이 / 점선 = 가동률 추이 · <b>-</b> 매출0(가동O) · 공란 미가동(가동월 제외) ·
+      누계 가동률은 가동 구간 전체를 병상가중 합산 · 평가제외 = 7개월차↑ & 누계 30%↓
+    </div>
+
+    <div class="sec-head"><span class="ey">02</span><h2>월별 합계 추이</h2>
+      <span class="hint">선택된 ${rows.length}개 처 기준</span></div>
+    <div class="chart-box"><canvas id="trend"></canvas></div>
+    <div class="legend">
+      <span><i style="background:var(--rev)"></i>월 매출(억)</span>
+      <span><i style="background:var(--accent)"></i>평균 가동률(%)</span>
+    </div>
+
+    <div class="sec-head"><span class="ey">03</span><h2>사업부·사무소별 집계</h2></div>
+    ${divisionCards(rows)}
+  `;
+
+  // bind
+  ["div","office","form"].forEach(k=>{
+    document.getElementById("sel-"+k).onchange=e=>{state[k==="div"?"div":k]=e.target.value;
+      if(k==="div") state.office="전체"; render();};
+  });
+  document.getElementById("q").oninput=e=>{state.q=e.target.value; render();};
+  document.getElementById("csv").onclick=()=>downloadCSV(rows);
+  document.querySelectorAll("thead th[data-k]").forEach(th=>{
+    th.onclick=()=>{const k=th.dataset.k;
+      if(state.sortKey===k) state.sortDir*=-1; else {state.sortKey=k; state.sortDir=-1;}
+      render();};
+  });
+  // restore search focus
+  const qi=document.getElementById("q"); if(state.q){qi.focus(); qi.setSelectionRange(qi.value.length,qi.value.length);}
+  drawTrend(rows);
+}
+
+function sel(key,opts){
+  const cur = key==="div"?state.div:state[key];
+  return `<select id="sel-${key}">${opts.map(o=>`<option ${o===cur?"selected":""}>${o}</option>`).join("")}</select>`;
+}
+
+function table(rows){
+  const sorted = sortRows(rows);
+  const monthHead = MONTHS.map(m=>`<th colspan="2">${m}</th>`).join("");
+  const subHead = MONTHS.map(()=>`<th class="sub">매출</th><th class="sub">가동</th>`).join("");
+  const arrow = k => state.sortKey===k ? (state.sortDir<0?"▾":"▴") : "";
+  const act = k => state.sortKey===k?"act":"";
+  return `<table>
+    <thead>
+      <tr class="grouprow">
+        <th colspan="5" class="lft">거래처</th>
+        <th colspan="3">요약</th>
+        ${monthHead}
+      </tr>
+      <tr>
+        <th class="lft ${act('hosp')}" data-k="hosp">병원명 <span class="ar">${arrow('hosp')}</span></th>
+        <th class="lft">형태</th>
+        <th class="lft">사업부</th>
+        <th>병상</th>
+        <th class="${act('activeMonths')}" data-k="activeMonths">가동월 <span class="ar">${arrow('activeMonths')}</span></th>
+        <th class="${act('cumRev')}" data-k="cumRev">누적매출 <span class="ar">${arrow('cumRev')}</span></th>
+        <th class="${act('cumUtil')}" data-k="cumUtil">누계가동 <span class="ar">${arrow('cumUtil')}</span></th>
+        <th class="${act('curUtil')}" data-k="curUtil">당월가동 <span class="ar">${arrow('curUtil')}</span></th>
+        ${MONTHS.map(m=>`<th colspan="2" style="text-align:center;font-size:10px">${m}</th>`).join("")}
+      </tr>
+    </thead>
+    <tbody>
+      ${sorted.map(d=>rowHTML(d)).join("")}
+    </tbody>
+  </table>`;
+}
+
+function rowHTML(d){
+  const formTag = d.form==="튜닝형"
+    ? `<span class="tag tn">튜닝</span>` : `<span class="tag gj">기존</span>`;
+  let gradeHTML;
+  if(d.excluded) gradeHTML=`<span class="grade g-X">제외</span>`;
+  else if(d.cumUtil==null) gradeHTML=`<span class="dash">—</span>`;
+  else {const [g,c]=gradeOf(d.cumUtil); gradeHTML=`<span class="grade ${c}">${g}</span>`;}
+
+  const cells = d.monthly.map(m=>{
+    let rev,util;
+    if(m.rev==null){ rev=`<span class="dash">·</span>`; util=`<span class="dash">·</span>`; }
+    else if(m.rev===0){ rev=`<span class="dash">-</span>`; util=`<span class="dash">-</span>`; }
+    else {
+      rev=`<span class="rev-cell">${(m.rev/1e6).toFixed(1)}</span>`;
+      util = m.util!=null ? `<span class="util-cell" style="color:${utilColor(m.util)}">${m.util.toFixed(0)}</span>` : `<span class="dash">·</span>`;
+    }
+    return `<td>${rev}</td><td>${util}</td>`;
+  }).join("");
+
+  return `<tr>
+    <td class="lft"><span class="hosp">${d.hosp}</span><br><span class="code">${d.code} · ${d.mgr||""}</span></td>
+    <td class="lft">${formTag}</td>
+    <td class="lft" style="font-size:11px;color:var(--ink-soft)">${d.biz}<br>${d.off}</td>
+    <td>${d.beds}</td>
+    <td>${d.activeMonths}</td>
+    <td class="rev-cell">${won(d.cumRev)}</td>
+    <td>${d.cumUtil!=null?`<span style="color:${utilColor(d.cumUtil)};font-weight:700">${d.cumUtil.toFixed(1)}%</span> ${gradeHTML}`:gradeHTML}</td>
+    <td>${d.curUtil!=null?`<span style="color:${utilColor(d.curUtil)};font-weight:700">${d.curUtil.toFixed(1)}%</span>`:`<span class="dash">—</span>`}</td>
+    ${cells}
+  </tr>`;
+}
+
+function utilColor(p){
+  if(p>=70) return "#0e6e5c"; if(p>=60) return "#3a8f5c";
+  if(p>=50) return "#7a9e3a"; if(p>=40) return "#b7892f"; return "#c0492f";
+}
+
+function sortRows(rows){
+  const k=state.sortKey, dir=state.sortDir;
+  return [...rows].sort((a,b)=>{
+    let va=a[k], vb=b[k];
+    if(k==="hosp") return va.localeCompare(vb,"ko")*dir;
+    va = va==null?-1:va; vb=vb==null?-1:vb;
+    return (va-vb)*dir;
+  });
+}
+
+function divisionCards(rows){
+  const groups={};
+  rows.forEach(d=>{(groups[d.biz]=groups[d.biz]||[]).push(d);});
+  const order=["서울1","서울2","지방1","지방2","지방3","지방4"];
+  const keys=Object.keys(groups).sort((a,b)=>{
+    const ia=order.indexOf(a), ib=order.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib);
+  });
+  return `<div class="div-grid">${keys.map(k=>{
+    const g=groups[k];
+    const rev=g.reduce((s,d)=>s+d.cumRev,0);
+    const wu=g.filter(d=>d.cumUtil!=null);
+    const avg=wu.length?wu.reduce((s,d)=>s+d.cumUtil,0)/wu.length:0;
+    const beds=g.reduce((s,d)=>s+d.beds,0);
+    return `<div class="div-card">
+      <h3>${k}<span class="n">${g.length}처</span></h3>
+      <div class="div-row"><span class="k">누적 매출</span><span class="v rev">${eok(rev)}억</span></div>
+      <div class="div-row"><span class="k">평균 가동률</span><span class="v util">${avg.toFixed(1)}%</span></div>
+      <div class="div-row"><span class="k">총 병상수</span><span class="v">${beds.toLocaleString()}</span></div>
+      <div class="div-row"><span class="k">평가제외</span><span class="v">${g.filter(d=>d.excluded).length}처</span></div>
+    </div>`;
+  }).join("")}</div>`;
+}
+
+let trendChart=null;
+function drawTrend(rows){
+  const ctx=document.getElementById("trend"); if(!ctx) return;
+  const revByMonth = MONTHS.map(mk=>
+    rows.reduce((s,d)=>{const m=d.monthly.find(x=>x.mk===mk); return s+((m&&m.rev)||0);},0)/1e8);
+  const utilByMonth = MONTHS.map(mk=>{
+    const us=rows.map(d=>{const m=d.monthly.find(x=>x.mk===mk); return m&&m.util;}).filter(u=>u!=null&&!isNaN(u));
+    return us.length? us.reduce((a,b)=>a+b,0)/us.length : null;
+  });
+  if(trendChart) trendChart.destroy();
+  trendChart=new Chart(ctx,{
+    data:{labels:MONTHS.map(m=>m+"월"),
+      datasets:[
+        {type:"bar",label:"월 매출(억)",data:revByMonth,backgroundColor:"#2b5c8a",
+         yAxisID:"y",borderRadius:4,order:2},
+        {type:"line",label:"평균 가동률(%)",data:utilByMonth,borderColor:"#0e6e5c",
+         backgroundColor:"#0e6e5c",yAxisID:"y1",tension:.3,borderWidth:2.5,
+         pointRadius:3,pointBackgroundColor:"#0e6e5c",order:1,spanGaps:true},
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>c.dataset.label.includes("매출")
+          ? ` 매출 ${c.parsed.y.toFixed(2)}억` : ` 가동률 ${c.parsed.y.toFixed(1)}%`}}},
+      scales:{
+        y:{position:"left",title:{display:true,text:"매출(억)"},grid:{color:"#efece3"}},
+        y1:{position:"right",title:{display:true,text:"가동률(%)"},
+          grid:{drawOnChartArea:false},min:0,max:100},
+        x:{grid:{display:false}}
+      }}
+  });
+}
+
+function downloadCSV(rows){
+  const head=["병원명","거래처코드","담당자","사업부","사무소","세부형태","병상수","가동월","누적매출",
+    "누계가동률(%)","당월가동률(%)","등급",
+    ...MONTHS.flatMap(m=>[`${m}_매출`,`${m}_가동률`])];
+  const body=rows.map(d=>{
+    let grade=d.excluded?"제외":(d.cumUtil==null?"":gradeOf(d.cumUtil)[0]);
+    return [d.hosp,d.code,d.mgr,d.biz,d.off,d.form,d.beds,d.activeMonths,d.cumRev,
+      d.cumUtil!=null?d.cumUtil.toFixed(1):"",d.curUtil!=null?d.curUtil.toFixed(1):"",grade,
+      ...d.monthly.flatMap(m=>[m.rev==null?"":m.rev, m.util!=null?m.util.toFixed(1):""])
+    ];
+  });
+  const csv=[head,...body].map(r=>r.map(c=>`"${c??""}"`).join(",")).join("\n");
+  const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`thync_매출가동률_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+init();
+</script>
+</body>
+</html>
